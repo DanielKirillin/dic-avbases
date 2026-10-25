@@ -1,0 +1,34 @@
+# Ежедневное дополнение баз DIC: свежие фишинговые и вирусные сайты из открытых лент -> phish_daily.bin.dicx в релиз «latest».
+# Скрипт: scripts/daily_bases.py (только стандартная библиотека Python). Отметка last_update.txt — чтобы GitHub не
+# выключил расписание: в публичном репозитории без коммитов 60 дней оно отключается.
+name: dic-daily
+on:
+  schedule:
+    - cron: "41 3 * * *"
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Собрать дополнение LinkScan
+        run: python scripts/daily_bases.py phish_daily.bin.dicx
+      - name: Выложить в релиз latest
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Базы ClamAV для DIC
+          files: phish_daily.bin.dicx
+      - name: Отметка обновления
+        run: |
+          date -u +"%Y-%m-%d %H:%M UTC" > last_update.txt
+          git config user.name "dic-bot"
+          git config user.email "dic-bot@users.noreply.github.com"
+          git add last_update.txt
+          git commit -m "Обновление баз $(date -u +%Y-%m-%d)" || true
+          git push
