@@ -1,0 +1,35 @@
+# Зеркало баз ClamAV для DIC.Антивирус (Cisco не отдаёт базы на российские адреса — серверы GitHub в США получают их без проблем).
+# Раз в сутки скачивает main/daily/bytecode.cvd официальным инструментом cvdupdate и выкладывает в релиз «latest».
+# DIC берёт файлы по адресу https://github.com/DanielKirillin/dic-avbases/releases/latest/download/<файл>.
+# Подлинность баз проверяет сам ClamAV: .cvd подписаны Cisco, подделку он не загрузит.
+name: clamav-mirror
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Скачать базы ClamAV
+        run: |
+          pip install cvdupdate
+          cvd config set --dbdir "$PWD/db"
+          cvd update
+          ls -la db
+      - name: Выложить в релиз latest
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Базы ClamAV для DIC
+          body: Обновляется автоматически раз в сутки.
+          make_latest: true
+          files: |
+            db/main.cvd
+            db/daily.cvd
+            db/bytecode.cvd
