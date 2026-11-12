@@ -1,0 +1,3 @@
+# DIC.LinkScan: our own list of dangerous sites, added by hand.
+# Format: domain category   (1 = phishing, 2 = malware download). Subdomains are covered automatically.
+androips.com 2   # 2026-11-12: fake "hacked games/apps" for Android -> Android.Subscription, redirects to casino, reads clipboard

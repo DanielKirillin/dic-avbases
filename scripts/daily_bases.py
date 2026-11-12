@@ -29,8 +29,31 @@ def host_of(line):
     return s
 
 
+def own_sites(cats):
+    """Our own list (dic_sites.txt in repo root): "domain category" per line, # comments; category 1 phishing, 2 malware."""
+    try:
+        lines = open("dic_sites.txt", encoding="utf-8").read().splitlines()
+    except OSError as e:
+        print("skip dic_sites.txt", e)
+        return
+    n = 0
+    for line in lines:
+        f = line.split("#", 1)[0].split()
+        if not f:
+            continue
+        h = host_of(f[0])
+        cat = int(f[1]) if len(f) > 1 and f[1].isdigit() else 2
+        if not h:
+            continue
+        k = struct.unpack(">Q", hashlib.sha256(h.encode()).digest()[:8])[0]
+        cats[k] = min(cats.get(k, cat), cat)
+        n += 1
+    print("dic_sites.txt", n)
+
+
 def main(out):
     cats = {}
+    own_sites(cats)
     for url, cat in FEEDS:
         try:
             data = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "DIC-avbases"}), timeout=120).read()
