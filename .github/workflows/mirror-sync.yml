@@ -1,0 +1,57 @@
+# Зеркало в Яндекс Облаке (решение Даниила 14.11): GitHub — оригинал, Яндекс — копия, потому что из России GitHub отдаёт 0,1–0,2 МБ/с.
+# Внутри GitHub всё качается быстро, отсюда же заливаем в хранилище dic-avbases (storage.yandexcloud.net, публичное чтение).
+# Только копирование, без удаления: ключ dic-mirror (роль storage.uploader) удалять и не умеет. Договор — DICAntivirusPC/docs/MIRROR_YANDEX.md.
+name: mirror-sync
+on:
+  workflow_dispatch: {}
+  workflow_run:
+    workflows: ["dic-daily", "clamav-mirror"]
+    types: [completed]
+  release:
+    types: [published, edited]
+  push:
+    branches: [main]
+    paths: ["mobile/**"]
+  schedule:
+    - cron: "17 */6 * * *"
+permissions:
+  contents: read
+concurrency:
+  group: mirror-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Собрать файлы с GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          R=${{ github.repository }}
+          mkdir -p out/latest out/dicexpert out/pc-app out/mobile out/hypatia out/atom/v1.0
+          gh release download latest    -R "$R" -D out/latest    --clobber
+          gh release download dicexpert -R "$R" -D out/dicexpert --clobber || echo "dicexpert: нет выпуска"
+          gh release download pc-app    -R "$R" -D out/pc-app    --clobber || echo "pc-app: нет выпуска"
+          cp mobile/* out/mobile/
+          gh release download v1.0 -R DanielKirillin/dic-atomengine -D out/atom/v1.0 --clobber || echo "atom: нет выпуска"
+          H=https://maintainteam.github.io/HypatiaDatabases/
+          for f in $(curl -fsSL "$H" | grep -oE 'href="\./[^"]+"' | sed -e 's#href="\./##' -e 's#"##'); do
+            curl -fsSL --retry 3 -o "out/hypatia/$f" "$H$f"
+          done
+          date -u +"%Y-%m-%d %H:%M UTC" > out/updated.txt
+          echo "файлов: $(find out -type f | wc -l), объём: $(du -sh out | cut -f1)"
+      - name: Залить в Яндекс Облако
+        env:
+          RCLONE_CONFIG_YC_TYPE: s3
+          RCLONE_CONFIG_YC_PROVIDER: Other
+          RCLONE_CONFIG_YC_ENDPOINT: https://storage.yandexcloud.net
+          RCLONE_CONFIG_YC_REGION: ru-central1
+          RCLONE_CONFIG_YC_ACCESS_KEY_ID: ${{ secrets.YC_S3_KEY_ID }}
+          RCLONE_CONFIG_YC_SECRET_ACCESS_KEY: ${{ secrets.YC_S3_SECRET }}
+        run: |
+          if [ -z "$RCLONE_CONFIG_YC_ACCESS_KEY_ID" ]; then echo "нет ключа Яндекса — пропускаю"; exit 0; fi
+          curl -fsSL https://rclone.org/install.sh | sudo bash >/dev/null
+          rclone copy out yc:dic-avbases --checksum --s3-no-check-bucket --transfers 8 --stats-one-line -v
+          rclone check out yc:dic-avbases --one-way --s3-no-check-bucket
