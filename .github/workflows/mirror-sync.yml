@@ -40,6 +40,11 @@ jobs:
           for f in $(curl -fsSL "$H" | grep -oE 'href="\./[^"]+"' | sed -e 's#href="\./##' -e 's#"##'); do
             curl -fsSL --retry 3 -o "out/hypatia/$f" "$H$f"
           done
+          # Постоянный адрес для кнопки «Скачать» на сайте: pc-app/DICAntivirus_Setup.exe = последняя версия из подписанного описания
+          if [ -f out/pc-app/dic_pc_update.json ]; then
+            F=$(python3 -c "import json;print(json.load(open('out/pc-app/dic_pc_update.json'))['file'])")
+            [ -f "out/pc-app/$F" ] && cp "out/pc-app/$F" out/pc-app/DICAntivirus_Setup.exe && echo "последняя версия для сайта: $F"
+          fi
           date -u +"%Y-%m-%d %H:%M UTC" > out/updated.txt
           echo "файлов: $(find out -type f | wc -l), объём: $(du -sh out | cut -f1)"
       - name: Залить в Яндекс Облако
