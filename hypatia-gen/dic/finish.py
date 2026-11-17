@@ -70,7 +70,7 @@ with gzip.open(os.path.join(OUT, "all_hashes.txt.gz"), "wt", encoding="ascii", c
 with gzip.open(os.path.join(OUT, "hypatia-delta.txt.gz"), "wt", encoding="ascii", compresslevel=9) as fh:
     for h in added:
         fh.write(h + "\n")
-with open(os.path.join(OUT, "hypatia-exclusions.txt"), "w", encoding="ascii") as fh:
+with open(os.path.join(OUT, "hypatia-exclusions.txt"), "w", encoding="utf-8") as fh:
     fh.write("# Исключения DIC: хэши честных файлов, которые попадали в публичные списки. Применять и к чужой базе Hypatia.\n")
     for h in sorted(excl):
         fh.write(h + "\n")

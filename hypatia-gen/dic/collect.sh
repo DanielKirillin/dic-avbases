@@ -17,6 +17,9 @@ GEN="$(cd "$(dirname "$0")/.." && pwd)"
 cp "$GEN"/static/* "$RAW/"
 cp "$GEN"/exclusions/* "$EXC/" 2>/dev/null || true
 
+# abuse.ch с 2025 г. отдаёт выгрузки только с бесплатным ключом (без него — 410/401). Ключ — секрет ABUSECH_KEY.
+AB=()
+[ -n "${ABUSECH_KEY:-}" ] && AB=(-H "Auth-Key: $ABUSECH_KEY")
 FULL="${FULL:-0}"
 [ "$(date -u +%u)" = "7" ] && FULL=1
 note "полная выгрузка abuse.ch: $FULL"
@@ -58,11 +61,11 @@ curl -fsSL --retry 3 -o "$RAW/signature-base.loki" https://raw.githubusercontent
 # --- ThreatFox (abuse.ch) ---
 ( set -e
   if [ "$FULL" = "1" ]; then
-    curl -fsSL --retry 3 -o "$VAR/threatfox.zip" "https://threatfox.abuse.ch/export/csv/sha256/full/"
+    curl -fsSL --retry 3 "${AB[@]}" -o "$VAR/threatfox.zip" "https://threatfox.abuse.ch/export/csv/sha256/full/"
     unzip -o -q "$VAR/threatfox.zip" -d "$VAR/threatfox"
     F=$(ls "$VAR"/threatfox/*.csv | head -1)
   else
-    curl -fsSL --retry 3 -o "$VAR/threatfox_recent.csv" "https://threatfox.abuse.ch/export/csv/sha256/recent/"
+    curl -fsSL --retry 3 "${AB[@]}" -o "$VAR/threatfox_recent.csv" "https://threatfox.abuse.ch/export/csv/sha256/recent/"
     F="$VAR/threatfox_recent.csv"
   fi
   # в CSV колонки разделены «", "» — берём сами 64-значные хэши, так не зависим от разделителей
@@ -72,11 +75,11 @@ curl -fsSL --retry 3 -o "$RAW/signature-base.loki" https://raw.githubusercontent
 # --- MalwareBazaar (abuse.ch) ---
 ( set -e
   if [ "$FULL" = "1" ]; then
-    curl -fsSL --retry 3 -o "$VAR/bazaar.zip" "https://bazaar.abuse.ch/export/txt/sha256/full/"
+    curl -fsSL --retry 3 "${AB[@]}" -o "$VAR/bazaar.zip" "https://bazaar.abuse.ch/export/txt/sha256/full/"
     unzip -o -q "$VAR/bazaar.zip" -d "$VAR/bazaar"
     cat "$VAR"/bazaar/*.txt
   else
-    curl -fsSL --retry 3 "https://bazaar.abuse.ch/export/txt/sha256/recent/"
+    curl -fsSL --retry 3 "${AB[@]}" "https://bazaar.abuse.ch/export/txt/sha256/recent/"
   fi | tr -d '\r' | grep -oE '^[0-9a-fA-F]{64}' > "$RAW/malware_bazaar.sha256"
   [ -s "$RAW/malware_bazaar.sha256" ] ) && note "MalwareBazaar: ок ($(wc -l < "$RAW/malware_bazaar.sha256"))" || note "MalwareBazaar: НЕ ПОЛУЧИЛОСЬ"
 
@@ -89,7 +92,8 @@ curl -fsSL --retry 3 -o "$RAW/signature-base.loki" https://raw.githubusercontent
 # --- SaneSecurity (rsync, раз в сутки — в пределах их правил) ---
 ( set -e
   mkdir -p "$VAR/sanesecurity" && cd "$VAR/sanesecurity"
-  rsync -a --timeout=120 rsync://rsync.sanesecurity.net/sanesecurity .
+  # без -a: права «только чтение» с сервера не переносим, иначе rsync сам не может писать в папку (первый прогон 17.11)
+  rsync -rt --no-perms --chmod=ugo=rwX --timeout=120 rsync://rsync.sanesecurity.net/sanesecurity .
   for f in *.hsb *.hdb; do [ -f "$f" ] && sort -u "$f" > "$RAW/sanesecurity-$f"; done
   rm -f "$RAW/sanesecurity-crdfam.clamav.hdb" "$RAW/sanesecurity-doppelstern.hdb" "$RAW/sanesecurity-malware.expert.hdb"
   true ) && note "SaneSecurity: ок" || note "SaneSecurity: НЕ ПОЛУЧИЛОСЬ"
@@ -108,7 +112,8 @@ curl -fsSL --retry 3 -o "$RAW/signature-base.loki" https://raw.githubusercontent
   && note "Targeted Threats: ок" || note "Targeted Threats: НЕ ПОЛУЧИЛОСЬ"
 
 # --- Домены (Divested) ---
-curl -fsSL --retry 3 -o "$DOM/divested.txt" "https://divested.dev/hosts-domains" \
+# 17.11 divested.dev отвечает 403 и с GitHub, и из России — тогда домены приходят из последней базы MaintainTeam (слияние)
+curl -fsSL --retry 3 -A "Wget/1.21.4" -L -o "$DOM/divested.txt" "http://divested.dev/hosts-domains" \
   && note "Домены Divested: ок ($(wc -l < "$DOM/divested.txt"))" || note "Домены Divested: НЕ ПОЛУЧИЛОСЬ"
 
 note "файлов в raw: $(ls "$RAW" | wc -l), исключений: $(cat "$EXC"/* 2>/dev/null | wc -l) строк"

@@ -42,6 +42,7 @@ jobs:
       - name: Источники
         env:
           FULL: ${{ github.event.inputs.full || '0' }}
+          ABUSECH_KEY: ${{ secrets.ABUSECH_KEY }}
         run: bash hypatia-gen/dic/collect.sh "$W" "${{ github.repository }}"
       - name: Прошлая сборка и их база (для слияния и дельты)
         run: |
