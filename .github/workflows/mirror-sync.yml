@@ -5,7 +5,7 @@ name: mirror-sync
 on:
   workflow_dispatch: {}
   workflow_run:
-    workflows: ["dic-daily", "clamav-mirror"]
+    workflows: ["dic-daily", "clamav-mirror", "hypatia-build"]
     types: [completed]
   release:
     types: [published, edited]
@@ -30,11 +30,13 @@ jobs:
         run: |
           set -e
           R=${{ github.repository }}
-          mkdir -p out/latest out/dicexpert out/dicexpert-m out/pc-app out/mobile out/hypatia out/atom/v1.0
+          mkdir -p out/latest out/dicexpert out/dicexpert-m out/pc-app out/mobile out/hypatia out/hypatia-dic out/atom/v1.0
           gh release download latest    -R "$R" -D out/latest    --clobber
           gh release download dicexpert -R "$R" -D out/dicexpert --clobber || echo "dicexpert: нет выпуска"
           gh release download dicexpert-m -R "$R" -D out/dicexpert-m --clobber || echo "dicexpert-m: нет выпуска"
           gh release download pc-app    -R "$R" -D out/pc-app    --clobber || echo "pc-app: нет выпуска"
+          # 17.11 наша сборка Hypatia (hypatia-build): программам — фильтры, подписи, описание, дельта, исключения; полный список хэшей — только для сборки
+          gh release download hypatia-dic -R "$R" -D out/hypatia-dic --clobber -p "hypatia-*" -p "manifest.json*" || echo "hypatia-dic: нет выпуска"
           cp mobile/* out/mobile/
           gh release download v1.0 -R DanielKirillin/dic-atomengine -D out/atom/v1.0 --clobber || echo "atom: нет выпуска"
           H=https://maintainteam.github.io/HypatiaDatabases/

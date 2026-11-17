@@ -1,0 +1,85 @@
+# Наша сборка базы Hypatia (17.11.2026, Даниил: «по хорошему нам бы и hypatia на наших серверах», «наш -> hypatia»).
+# База MaintainTeam заброшена («Maintained by: nobody», последняя сборка 27.09.2026), и из неё нельзя убрать ложные записи
+# (17.11 у тестера системный cmstp.exe стал «вирусом»). Собираем тем же генератором (hypatia-gen, закреплённая версия 3c35f52),
+# из тех же открытых источников, плюс наши исключения, вливаем их фильтры побитово (в нашей базе есть всё, что было у них),
+# подписываем своим ключом (DICPlay Hypatia Databases, A08D549D…) и выкладываем в выпуск hypatia-dic; mirror-sync копирует
+# в Яндекс (hypatia-dic/). Программы: наш Яндекс → наш GitHub → их база (Яндекс hypatia/ → maintainteam.github.io).
+# Ограничения источников: ClamAV — из нашего выпуска latest; abuse.ch — полная выгрузка раз в неделю, иначе свежее за 48 ч.
+name: hypatia-build
+on:
+  schedule:
+    - cron: "47 4 * * *"      # после clamav-mirror (02:17) — свежий ClamAV уже в latest
+  workflow_dispatch:
+    inputs:
+      full:
+        description: "Полная выгрузка abuse.ch (1) или только свежее (0)"
+        default: "0"
+permissions:
+  contents: write
+concurrency:
+  group: hypatia-build
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      W: ${{ github.workspace }}/work
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Инструменты
+        run: |
+          sudo apt-get update -y >/dev/null
+          sudo apt-get install -y maven unzip rsync clamav >/dev/null   # clamav — только ради sigtool, freshclam не запускаем
+      - name: Источники
+        env:
+          FULL: ${{ github.event.inputs.full || '0' }}
+        run: bash hypatia-gen/dic/collect.sh "$W" "${{ github.repository }}"
+      - name: Прошлая сборка и их база (для слияния и дельты)
+        run: |
+          mkdir -p "$W/prev" "$W/upstream"
+          gh release download hypatia-dic -R "${{ github.repository }}" -p all_hashes.txt.gz -p manifest.json -D "$W/prev" --clobber || echo "прошлой сборки нет"
+          H=https://maintainteam.github.io/HypatiaDatabases/
+          for f in hypatia-md5-bloom.bin hypatia-sha1-bloom.bin hypatia-sha256-bloom.bin hypatia-domains-bloom.bin generation_time.html; do
+            curl -fsSL --retry 3 -o "$W/upstream/$f" "$H$f" || echo "их $f не скачался"
+          done
+          cat "$W/upstream/generation_time.html" || true
+      - name: Генератор Hypatia (как у MaintainTeam)
+        working-directory: hypatia-gen
+        run: |
+          mvn -q -B --no-transfer-progress clean compile exec:java -Dexec.mainClass="org.maintainteam.hypatiadatabases.App" \
+            -Dexec.args="$W/raw/ $W/domains/divested.txt" | tee "$W/generation_report.txt" | tail -30
+          ls -la "$W"/raw/hypatia-*-bloom.bin
+      - name: Слияние, полнота, дельта, описание
+        run: |
+          P="$W/prev/all_hashes.txt.gz"; [ -f "$P" ] || P=-
+          python hypatia-gen/dic/finish.py "$W/raw" "$W/exclusions" "$W/upstream" "$P" "$W/out"
+          cp "$W/collect_report.txt" "$W/generation_report.txt" "$W/out/"
+      - name: Подпись нашим ключом
+        env:
+          KEY: ${{ secrets.HYPATIA_GPG_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then echo "нет ключа HYPATIA_GPG_KEY — без подписи не выкладываем"; exit 1; fi
+          export GNUPGHOME="$(mktemp -d)"
+          echo "$KEY" | gpg --batch --import
+          cd "$W/out"
+          for f in hypatia-*-bloom.bin hypatia-delta.txt.gz hypatia-exclusions.txt manifest.json; do
+            gpg --batch --yes --detach-sign -o "$f.sig" "$f"
+          done
+          ls -la
+      - name: Выложить в выпуск hypatia-dic
+        run: |
+          R="${{ github.repository }}"
+          gh release view hypatia-dic -R "$R" >/dev/null 2>&1 || gh release create hypatia-dic -R "$R" --latest=false \
+            -t "База DIC (сборка Hypatia)" -n "Наша сборка базы Hypatia: те же источники, исключения DIC, подпись DICPlay. Обновляется раз в сутки."
+          cd "$W/out"
+          gh release upload hypatia-dic -R "$R" --clobber *
+          gh release edit latest -R "$R" --latest   # «последний» — выпуск с базами ClamAV, как и раньше
