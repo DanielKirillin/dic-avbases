@@ -48,6 +48,8 @@ jobs:
             F=$(python3 -c "import json;print(json.load(open('out/pc-app/dic_pc_update.json'))['file'])")
             [ -f "out/pc-app/$F" ] && cp "out/pc-app/$F" out/pc-app/DICAntivirus_Setup.exe && echo "последняя версия для сайта: $F"
           fi
+          # 17.11 сторонние списки для телефонов (ext/): только целые файлы, без HTML-страниц ошибок (scripts/ext_lists.py)
+          python3 scripts/ext_lists.py out/ext || echo "ext: ошибка, в зеркале остаются прежние копии"
           date -u +"%Y-%m-%d %H:%M UTC" > out/updated.txt
           echo "файлов: $(find out -type f | wc -l), объём: $(du -sh out | cut -f1)"
       - name: Залить в Яндекс Облако
