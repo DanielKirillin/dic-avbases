@@ -25,6 +25,11 @@ LISTS = [
      "tif.medium-onlydomains.txt", 1000, "hagezi/dns-blocklists — GPL-3.0"),
     (["https://raw.githubusercontent.com/AssoEchap/stalkerware-indicators/master/ioc.yaml"],
      "ioc.yaml", 50, "AssoEchap/stalkerware-indicators — CC BY 4.0"),
+    # 17.11 Даниил: «пофиг на лицензию, бери» (phishing.army — CC BY-NC 4.0; риск по некоммерческой лицензии принят владельцем)
+    (["https://phishing.army/download/phishing_army_blocklist_extended.txt"],
+     "phishing_army_blocklist_extended.txt", 1000, "Phishing Army — CC BY-NC 4.0 (решение владельца DIC 17.11.2026)"),
+    (["https://phishing.army/download/phishing_army_blocklist.txt"],
+     "phishing_army_blocklist.txt", 1000, "Phishing Army — CC BY-NC 4.0 (решение владельца DIC 17.11.2026)"),
 ]
 
 ok = []
