@@ -34,7 +34,14 @@ jobs:
           gh release download latest    -R "$R" -D out/latest    --clobber
           gh release download dicexpert -R "$R" -D out/dicexpert --clobber || echo "dicexpert: нет выпуска"
           gh release download dicexpert-m -R "$R" -D out/dicexpert-m --clobber || echo "dicexpert-m: нет выпуска"
-          gh release download pc-app    -R "$R" -D out/pc-app    --clobber || echo "pc-app: нет выпуска"
+          # 23.11 только последняя версия ПК (Даниил: «1»): старые установщики по 600 МБ хранятся в выпуске pc-app на GitHub,
+          # на зеркале они съедали платное место (бесплатен 1 ГБ). Ключ dic-mirror удалять не умеет — старые с зеркала убраны вручную.
+          if gh release download pc-app -R "$R" -D out/pc-app --clobber -p dic_pc_update.json; then
+            F=$(python3 -c "import json;print(json.load(open('out/pc-app/dic_pc_update.json'))['file'])")
+            gh release download pc-app -R "$R" -D out/pc-app --clobber -p "$F"
+          else
+            echo "pc-app: нет выпуска"
+          fi
           # 17.11 наша сборка Hypatia (hypatia-build): программам — фильтры, подписи, описание, дельта, исключения; полный список хэшей — только для сборки
           gh release download hypatia-dic -R "$R" -D out/hypatia-dic --clobber -p "hypatia-*" -p "manifest.json*" || echo "hypatia-dic: нет выпуска"
           cp mobile/* out/mobile/
