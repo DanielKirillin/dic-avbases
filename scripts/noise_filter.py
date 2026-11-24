@@ -24,7 +24,7 @@ storage.googleapis.com s3.amazonaws.com amazonaws.com cloudfront.net azurewebsit
 clck.ru vk.cc t.me telegra.ph notion.site googleusercontent.com appspot.com firebaseio.com duckdns.org no-ip.org ddns.net is.gd
 ow.ly rebrand.ly shorturl.at rb.gy surl.li qrco.de github.com raw.githubusercontent.com dropbox.com discord.com cdn.discordapp.com
 storage.yandexcloud.net website.yandexcloud.net firebasestorage.googleapis.com storage.cloud.google.com s3.timeweb.cloud filesusr.com
-u.to infura-ipfs.io cloudflare-ipfs.com arweave.net gravatar.com getpocket.com pastebin.com tilda.cc medium.com
+u.to infura-ipfs.io cloudflare-ipfs.com arweave.net gravatar.com getpocket.com pastebin.com tilda.cc medium.com yandexcloud.net googleapis.com
 away.vk.com l.instagram.com l.facebook.com lm.facebook.com out.reddit.com""".split())
 
 BIG = set("""google.com youtube.com vk.com vk.ru mail.ru ok.ru instagram.com facebook.com archive.org yandex.ru yandex.net
@@ -46,10 +46,13 @@ def platform(h):
     return any(h == b or h.endswith("." + b) for b in BIG)
 
 
-def popular():
-    """Tranco top-50k (без www.); пустое множество, если список не скачался."""
+def popular(zip_path=None):
+    """Tranco top-50k (без www.); пустое множество, если список не скачался. zip_path — локальная копия top-1m.csv.zip."""
     try:
-        data = urllib.request.urlopen(urllib.request.Request(TRANCO, headers={"User-Agent": "DIC-avbases"}), timeout=120).read()
+        if zip_path:
+            data = open(zip_path, "rb").read()
+        else:
+            data = urllib.request.urlopen(urllib.request.Request(TRANCO, headers={"User-Agent": "DIC-avbases"}), timeout=120).read()
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             rows = csv.reader(io.TextIOWrapper(z.open(z.namelist()[0]), encoding="utf-8"))
             top = set()
