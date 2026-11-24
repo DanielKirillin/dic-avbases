@@ -2,19 +2,18 @@
 import gzip, hashlib, struct, sys, urllib.request
 
 KEY = bytes([0x9E, 0xB7, 0xC5, 0xE3, 0xA9, 0xD1, 0xF2, 0x8B])
+from noise_filter import noisy_drop, platform, popular
+
+# (адрес, категория 1 фишинг / 2 вирусы, шумная): шумные ленты кладут целые площадки — их фильтр строже (scripts/noise_filter.py)
 FEEDS = [
-    ("https://raw.githubusercontent.com/Phishing-Database/Phishing.Database/master/phishing-domains-ACTIVE.txt", 1),
-    ("https://hole.cert.pl/domains/v2/domains.txt", 1),
-    ("https://malware-filter.gitlab.io/malware-filter/phishing-filter-domains.txt", 1),
-    ("https://raw.githubusercontent.com/openphish/public_feed/refs/heads/main/feed.txt", 1),
-    ("https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-domains.txt", 2),
+    ("https://raw.githubusercontent.com/Phishing-Database/Phishing.Database/master/phishing-domains-ACTIVE.txt", 1, True),
+    ("https://hole.cert.pl/domains/v2/domains.txt", 1, False),
+    ("https://malware-filter.gitlab.io/malware-filter/phishing-filter-domains.txt", 1, False),
+    ("https://raw.githubusercontent.com/openphish/public_feed/refs/heads/main/feed.txt", 1, True),
+    ("https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-domains.txt", 2, False),
 ]
-SHARED = set("""sites.google.com bit.ly t.co goo.gl tinyurl.com 000webhostapp.com firebaseapp.com web.app github.io gitlab.io pages.dev
-workers.dev vercel.app netlify.app glitch.me repl.co replit.dev herokuapp.com blogspot.com wordpress.com wixsite.com weebly.com tilda.ws
-ucoz.ru narod.ru square.site webflow.io mystrikingly.com carrd.co linktr.ee forms.gle docs.google.com drive.google.com
-storage.googleapis.com s3.amazonaws.com amazonaws.com cloudfront.net azurewebsites.net windows.net r2.dev ipfs.io dweb.link cutt.ly
-clck.ru vk.cc t.me telegra.ph notion.site googleusercontent.com appspot.com firebaseio.com duckdns.org no-ip.org ddns.net is.gd
-ow.ly rebrand.ly shorturl.at rb.gy surl.li qrco.de github.com raw.githubusercontent.com dropbox.com discord.com cdn.discordapp.com""".split())
+# Только подтверждает популярные сайты из шумных лент, в базу сама не идёт (курируемый список hagezi)
+CONFIRM_ONLY = ["https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/tif.medium-onlydomains.txt"]
 
 
 def host_of(line):
@@ -51,24 +50,38 @@ def own_sites(cats):
     print("dic_sites.txt", n)
 
 
+def fetch(url):
+    try:
+        data = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "DIC-avbases"}), timeout=120).read()
+    except Exception as e:
+        print("skip", url, e)
+        return None
+    return [h for h in map(host_of, data.decode("utf-8", "replace").splitlines()) if h]
+
+
 def main(out):
     cats = {}
     own_sites(cats)
-    for url, cat in FEEDS:
-        try:
-            data = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "DIC-avbases"}), timeout=120).read()
-        except Exception as e:
-            print("skip", url, e)
+    feeds = [(url, cat, noisy, fetch(url)) for url, cat, noisy in FEEDS]
+    confirmed = set()
+    for _, _, noisy, hosts in feeds:
+        if not noisy and hosts:
+            confirmed.update(h[4:] if h.startswith("www.") else h for h in hosts)
+    for url in CONFIRM_ONLY:
+        confirmed.update(h[4:] if h.startswith("www.") else h for h in fetch(url) or [])
+    top = popular()
+    for url, cat, noisy, hosts in feeds:
+        if hosts is None:
             continue
-        n = 0
-        for line in data.decode("utf-8", "replace").splitlines():
-            h = host_of(line)
-            if not h or h in SHARED:
+        n = dropped = 0
+        for h in hosts:
+            if (noisy_drop(h, top, confirmed) if noisy else platform(h)):
+                dropped += 1
                 continue
             k = struct.unpack(">Q", hashlib.sha256(h.encode()).digest()[:8])[0]
             cats[k] = min(cats.get(k, cat), cat)
             n += 1
-        print(url, n)
+        print(url, n, "отсеяно", dropped)
     keys = sorted(cats)
     blob = b"DICPH1" + struct.pack(">I", len(keys)) + b"".join(struct.pack(">Q", k) for k in keys) + bytes(cats[k] for k in keys)
     z = gzip.compress(blob, compresslevel=9, mtime=0)

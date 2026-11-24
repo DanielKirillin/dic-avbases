@@ -8,6 +8,11 @@ https://storage.yandexcloud.net/dic-avbases/ext/<имя>, при 404 — пре�
 """
 import os, sys, urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from noise_filter import noisy_drop, norm, popular
+
+NOISY = ("phishing-domains-ACTIVE.txt",)
+
 OUT = sys.argv[1]
 os.makedirs(OUT, exist_ok=True)
 # (адрес, имя в ext/, минимум строк, лицензия/условия)
@@ -33,6 +38,7 @@ LISTS = [
 ]
 
 ok = []
+got = {}
 for urls, name, min_lines, lic in LISTS:
     data = None
     for u in urls:
@@ -57,10 +63,33 @@ for urls, name, min_lines, lic in LISTS:
         except Exception as e:
             print(f"{name}: {u} — {e}")
     if data is not None:
-        open(os.path.join(OUT, name), "wb").write(data)
+        got[name] = data
         ok.append((name, urls[0], lic))
     else:
         print(f"{name}: НЕ ОБНОВЛЁН — в зеркале остаётся прежняя копия")
+
+# 24.11 Phishing.Database кладёт целые площадки (storage.yandexcloud.net — наш же сервер баз, away.vk.com, bit.ly…):
+# в копии на зеркале их нет, правила те же, что у M-Базы (noise_filter.py). Подтверждают курируемые списки выше.
+confirmed = set()
+for n in ("phishing-filter-domains.txt", "domains.txt", "urlhaus-filter-domains-online.txt", "tif.medium-onlydomains.txt"):
+    for l in got.get(n, b"").decode("utf-8", "replace").splitlines():
+        l = l.strip().lower()
+        if l and l[0] not in "#!":
+            confirmed.add(norm(l.split("://", 1)[-1].split("/", 1)[0].lstrip("*.")))
+top = popular()
+for n in NOISY:
+    if n in got:
+        keep, drop = [], 0
+        for l in got[n].decode("utf-8", "replace").splitlines():
+            h = l.strip().lower()
+            if h and h[0] not in "#!" and noisy_drop(h, top, confirmed):
+                drop += 1
+                continue
+            keep.append(l)
+        got[n] = ("\n".join(keep) + "\n").encode("utf-8")
+        print(f"{n}: отсеяно {drop} площадок и популярных сайтов")
+for name, data in got.items():
+    open(os.path.join(OUT, name), "wb").write(data)
 
 with open(os.path.join(OUT, "SOURCES.txt"), "w", encoding="utf-8") as f:
     f.write("Копии сторонних списков для DIC.Антивирус (обновляются раз в сутки). Источник и условия каждого:\n\n")
