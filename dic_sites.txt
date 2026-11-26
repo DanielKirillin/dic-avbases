@@ -1,3 +1,4 @@
 # DIC.LinkScan: our own list of dangerous sites, added by hand.
 # Format: domain category   (1 = phishing, 2 = malware download). Subdomains are covered automatically.
 androips.com 2   # 2026-11-12: fake "hacked games/apps" for Android -> Android.Subscription, redirects to casino, reads clipboard
+everham.tech 2   # 2026-11-26: reported as malware distribution; registered 2026-11-18 (RU-CENTER), hosted at SpaceWeb 193.232.89.179 (shared, IP not blocked), silent to plain requests (cloaking)
